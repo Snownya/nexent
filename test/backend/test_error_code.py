@@ -52,9 +52,9 @@ class TestErrorCodeHttpStatusMapping:
         """Test DIFY_AUTH_ERROR maps to HTTP 401."""
         assert ERROR_CODE_HTTP_STATUS[ErrorCode.DIFY_AUTH_ERROR] == 401
 
-    def test_dify_config_invalid_maps_to_401(self):
-        """Test DIFY_CONFIG_INVALID maps to HTTP 401."""
-        assert ERROR_CODE_HTTP_STATUS[ErrorCode.DIFY_CONFIG_INVALID] == 401
+    def test_dify_config_invalid_maps_to_400(self):
+        """Test DIFY_CONFIG_INVALID maps to HTTP 400."""
+        assert ERROR_CODE_HTTP_STATUS[ErrorCode.DIFY_CONFIG_INVALID] == 400
 
     def test_dify_connection_error_maps_to_502(self):
         """Test DIFY_CONNECTION_ERROR maps to HTTP 502."""

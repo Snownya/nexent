@@ -4,19 +4,104 @@ Unit tests for Exception Handler Middleware.
 Tests the ExceptionHandlerMiddleware class and helper functions
 for centralized error handling in the FastAPI application.
 """
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from fastapi import Request, HTTPException
-from fastapi.responses import JSONResponse, Response
+import atexit
+import sys
+import os
 
-from backend.middleware.exception_handler import (
+# Add backend directory to path for imports BEFORE any module imports
+backend_dir = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), "../..", "backend"))
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+
+import pytest
+from fastapi import Request, HTTPException
+from fastapi.responses import Response
+from middleware.exception_handler import (
     ExceptionHandlerMiddleware,
     _http_status_to_error_code,
     create_error_response,
     create_success_response,
 )
-from backend.consts.error_code import ErrorCode, ERROR_CODE_HTTP_STATUS
-from backend.consts.exceptions import AppException
+from consts.exceptions import AppException
+from consts.error_code import ErrorCode, ERROR_CODE_HTTP_STATUS
+from unittest.mock import patch, MagicMock, AsyncMock, Mock
+
+
+# Apply critical patches before importing any modules
+# This prevents real AWS/MinIO/Elasticsearch calls during import
+patch('botocore.client.BaseClient._make_api_call', return_value={}).start()
+
+# Patch storage factory and MinIO config validation to avoid errors during initialization
+# These patches must be started before any imports that use MinioClient
+storage_client_mock = MagicMock()
+minio_mock = MagicMock()
+minio_mock._ensure_bucket_exists = MagicMock()
+minio_mock.client = MagicMock()
+
+# Start critical patches first - storage factory and config validation must be patched
+# before any module imports that might trigger MinioClient initialization
+critical_patches = [
+    # Patch storage factory and MinIO config validation FIRST
+    patch('nexent.storage.storage_client_factory.create_storage_client_from_config',
+          return_value=storage_client_mock),
+    patch('nexent.storage.minio_config.MinIOStorageConfig.validate',
+          lambda self: None),
+    # Mock boto3 client
+    patch('boto3.client', return_value=Mock()),
+    # Mock boto3 resource
+    patch('boto3.resource', return_value=Mock()),
+    # Mock Elasticsearch to prevent connection errors
+    patch('elasticsearch.Elasticsearch', return_value=Mock()),
+]
+
+for p in critical_patches:
+    p.start()
+
+# Patch MinioClient class to return mock instance when instantiated
+# This prevents real initialization during module import
+patches = [
+    patch('backend.database.client.MinioClient', return_value=minio_mock),
+    patch('database.client.MinioClient', return_value=minio_mock),
+    patch('backend.database.client.minio_client', minio_mock),
+]
+
+for p in patches:
+    p.start()
+
+# Combine all patches for cleanup
+all_patches = critical_patches + patches
+
+# Now safe to import modules that use database.client
+# After import, we can patch get_db_session if needed
+try:
+    from backend.database import client as db_client_module
+    # Patch get_db_session after module is imported
+    db_session_patch = patch.object(
+        db_client_module, 'get_db_session', return_value=Mock())
+    db_session_patch.start()
+    all_patches.append(db_session_patch)
+except ImportError:
+    # If import fails, try patching the path directly (may trigger import)
+    db_session_patch = patch(
+        'backend.database.client.get_db_session', return_value=Mock())
+    db_session_patch.start()
+    all_patches.append(db_session_patch)
+
+# Now safe to import app modules - AFTER all patches are applied
+# Import exception classes
+
+# Import pytest for test decorators
+
+# Stop all patches at the end of the module
+
+
+def stop_patches():
+    for p in all_patches:
+        p.stop()
+
+
+atexit.register(stop_patches)
 
 
 class TestHttpStatusToErrorCode:

@@ -147,7 +147,7 @@ export const useErrorHandler = () => {
    * Wrap async function with error handling
    */
   const withErrorHandler = useCallback(
-    (fn: () => Promise<any>, options: ErrorHandlerOptions = {}) => {
+    (fn: (...args: any[]) => Promise<any>, options: ErrorHandlerOptions = {}) => {
       return async (...args: any[]) => {
         try {
           return await fn(...args);

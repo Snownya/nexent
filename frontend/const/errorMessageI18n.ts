@@ -185,7 +185,7 @@ export const showErrorToUser = (
  * await safeFetchData();
  */
 export const withErrorHandler = (
-  fn: () => Promise<any>,
+  fn: (...args: any[]) => Promise<any>,
   options: ShowErrorOptions = {}
 ) => {
   return async (...args: any[]) => {
