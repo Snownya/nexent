@@ -16,7 +16,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from consts.error_code import ErrorCode, ERROR_CODE_HTTP_STATUS
 from consts.error_message import ErrorMessage
-from consts.exceptions import AppException
 
 logger = logging.getLogger(__name__)
 
@@ -53,58 +52,66 @@ class ExceptionHandlerMiddleware(BaseHTTPMiddleware):
         try:
             response = await call_next(request)
             return response
-        except AppException as exc:
-            # Log the error with trace ID
-            logger.error(
-                f"[{trace_id}] AppException: {exc.error_code.value} - {exc.message}",
-                extra={"trace_id": trace_id,
-                       "error_code": exc.error_code.value}
-            )
-
-            # Use HTTP status from error code mapping, default to 500
-            http_status = exc.http_status
-
-            return JSONResponse(
-                status_code=http_status,
-                content={
-                    "code": exc.error_code.value,
-                    "message": exc.message,
-                    "trace_id": trace_id,
-                    "details": exc.details if exc.details else None
-                }
-            )
-        except HTTPException as exc:
-            # Handle FastAPI HTTPException for backward compatibility
-            # Map HTTP status codes to error codes
-            error_code = _http_status_to_error_code(exc.status_code)
-
-            return JSONResponse(
-                status_code=exc.status_code,
-                content={
-                    "code": error_code.value,
-                    "message": exc.detail,
-                    "trace_id": trace_id
-                }
-            )
         except Exception as exc:
-            # Log the full exception with traceback
-            logger.error(
-                f"[{trace_id}] Unhandled exception: {str(exc)}",
-                exc_info=True,
-                extra={"trace_id": trace_id}
-            )
+            # Check if it's an AppException by looking for the error_code attribute
+            # This handles both import path variations (backend.consts.exceptions vs consts.exceptions)
+            if hasattr(exc, 'error_code'):
+                # This is an AppException - get http_status from mapping
+                logger.error(
+                    f"[{trace_id}] AppException: {exc.error_code.value} - {exc.message}",
+                    extra={"trace_id": trace_id,
+                           "error_code": exc.error_code.value}
+                )
 
-            # Return generic error response with proper HTTP 500 status
-            # Using mixed mode: HTTP status code + business error code
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "code": ErrorCode.INTERNAL_ERROR.value,
-                    "message": ErrorMessage.get_message(ErrorCode.INTERNAL_ERROR),
-                    "trace_id": trace_id,
-                    "details": None
-                }
-            )
+                # Use HTTP status from error code mapping, default to 500
+                # Try to get http_status property first, then fall back to ERROR_CODE_HTTP_STATUS mapping
+                if hasattr(exc, 'http_status'):
+                    http_status = exc.http_status
+                else:
+                    http_status = ERROR_CODE_HTTP_STATUS.get(
+                        exc.error_code, 500)
+
+                return JSONResponse(
+                    status_code=http_status,
+                    content={
+                        "code": exc.error_code.value,
+                        "message": exc.message,
+                        "trace_id": trace_id,
+                        "details": exc.details if exc.details else None
+                    }
+                )
+            elif isinstance(exc, HTTPException):
+                # Handle FastAPI HTTPException for backward compatibility
+                # Map HTTP status codes to error codes
+                error_code = _http_status_to_error_code(exc.status_code)
+
+                return JSONResponse(
+                    status_code=exc.status_code,
+                    content={
+                        "code": error_code.value,
+                        "message": exc.detail,
+                        "trace_id": trace_id
+                    }
+                )
+            else:
+                # Log the full exception with traceback
+                logger.error(
+                    f"[{trace_id}] Unhandled exception: {str(exc)}",
+                    exc_info=True,
+                    extra={"trace_id": trace_id}
+                )
+
+                # Return generic error response with proper HTTP 500 status
+                # Using mixed mode: HTTP status code + business error code
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "code": ErrorCode.INTERNAL_ERROR.value,
+                        "message": ErrorMessage.get_message(ErrorCode.INTERNAL_ERROR),
+                        "trace_id": trace_id,
+                        "details": None
+                    }
+                )
 
 
 def create_error_response(

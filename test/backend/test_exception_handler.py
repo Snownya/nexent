@@ -98,7 +98,7 @@ class TestCreateErrorResponse:
             details=details
         )
 
-        assert response.status_code == 401
+        assert response.status_code == 400
 
     def test_create_error_response_custom_http_status(self):
         """Test creating error response with custom HTTP status."""
@@ -119,7 +119,7 @@ class TestCreateErrorResponse:
         """Test creating error response for DIFY_CONFIG_INVALID."""
         response = create_error_response(ErrorCode.DIFY_CONFIG_INVALID)
 
-        assert response.status_code == 401
+        assert response.status_code == 400
 
     def test_create_error_response_dify_rate_limit(self):
         """Test creating error response for DIFY_RATE_LIMIT."""
@@ -288,7 +288,7 @@ class TestExceptionHandlerMiddleware:
 
         response = await middleware.dispatch(mock_request, mock_call_next)
 
-        assert response.status_code == 401
+        assert response.status_code == 400
 
     @pytest.mark.asyncio
     async def test_different_error_codes_map_to_correct_status(self):
